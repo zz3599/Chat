@@ -48,11 +48,11 @@ app.route('/chat').get(function(req, res, next){
         db.run("INSERT INTO messages VALUES(?)", m, function(err){
             console.log(this);
             newMessages.push(m);
+            console.log('response queue size: ' + responseQueue.length);
             for(var i = 0; i < responseQueue.length; i++){
                 var responseItem = responseQueue[i];
                 //responseItem.response.send(str);
                 responseItem.response.send({'messages':newMessages});
-
             }  
             responseQueue = [];
             newMessages = [];
@@ -86,19 +86,22 @@ app.get('/', function(req, res){
   res.sendfile(path.resolve('index.html'));
 });
 
-(function clearTimedoutResponses(){
-    setTimeout(function(){
-        var minTime = new Date().getTime() - 5000;
-        for(var i = 0; i < responseQueue.length; i++){
-            if(responseQueue[i].timestamp < minTime){
-                console.log('cleared one response');
-                responseQueue[i].response.send(200);
-                responseQueue.splice(i, 1);
-            }
-        }
-        clearTimedoutResponses();
-    }, 1000);
-})();
+setInterval(function(){
+    console.log(responseQueue.length + " responses queued");
+}, 1000);
+// (function clearTimedoutResponses(){
+//     setTimeout(function(){
+//         var minTime = new Date().getTime() - 5000;
+//         for(var i = 0; i < responseQueue.length; i++){
+//             if(responseQueue[i].timestamp < minTime){
+//                 console.log('cleared one response');
+//                 responseQueue[i].response.send(200);
+//                 responseQueue.splice(i, 1);
+//             }
+//         }
+//         clearTimedoutResponses();
+//     }, 1000);
+// })();
 
 
 app.listen(3000);
