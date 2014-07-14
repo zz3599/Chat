@@ -1,12 +1,16 @@
 var express = require('express');
 var path = require('path');
+var bodyparser = require('body-parser');
 var sqlite = require('sqlite3').verbose();
+
 var app = express();
+app.use(express.static('public'));
+app.use( bodyparser.json()); // to support JSON-encoded bodies
 
 var db = new sqlite.Database(':memory:');
 
 var newMessages = [];
-var requestQueue = [];
+var responseQueue = [];
 
 db.serialize(function(){
     db.run("CREATE TABLE messages (message TEXT)");
@@ -25,71 +29,75 @@ function getRows(callback){
     db.all("SELECT rowid, message FROM messages", callback);
 }
 
-app.param('message', function(req, res, next, message){
-    req.message = message;
-    next();
-});
-
 app.route('/chat').get(function(req, res, next){
+    getRows(function(err, rows){
+        result = '';
+        for(var i = 0; i < rows.length; i++){
+            var row = rows[i];
+            result += '<p>' + row.message + '</p>' 
+        }
+        res.send(result);   
+
+    });   
+}).post(function(req, res, next){
+    console.log('in post');
     console.log(req.param('message'));
-    var m = req.param('message');
-    var rows = [];
+    var m = req.body.message;
+    console.log('message=' + m);
     if(m){
         db.run("INSERT INTO messages VALUES(?)", m, function(err){
             console.log(this);
             newMessages.push(m);
+            for(var i = 0; i < responseQueue.length; i++){
+                var responseItem = responseQueue[i];
+                //responseItem.response.send(str);
+                responseItem.response.send({'messages':newMessages});
+
+            }  
+            responseQueue = [];
+            newMessages = [];
         });
         getRows(logRow);
         console.log('inserted message');
         res.send(200);
-    } else {
-        getRows(function(err, rows){
-            result = '';
-            for(var i = 0; i < rows.length; i++){
-                var row = rows[i];
-                result += '<p>' + row.message + '</p>' 
-            }
-            res.send(result);
-
-        });
-
-    }    
+    }
 });
 
 app.route('/poll').get(function(req, res, next){
-    requestQueue.push({'request': req, 'timestamp' : new Date().getTime()});
+    var newItem = {'response': res, 'timestamp' : new Date().getTime()};
+    responseQueue.push(newItem);
+    console.log('polling for new messages');
     if(newMessages.length !== 0){
-        var str = '';
-        for(var j = 0; j < newMessages.length; j++){
-            var message = newMessages[j];
-            str += '<p>' + message + '</p>';
-        }
-        console.log(str);
-        for(var i = 0; i < requestQueue.length; i++){
-            var requestItem = requestQueue[i];
-            requestItem.request.send(str);
-        }    
-        requestQueue = [];
-        newMessages = [];
+        console.log('found new messages');
+        // for(var i = 0; i < responseQueue.length; i++){
+        //     var responseItem = responseQueue[i];
+        //     //responseItem.response.send(str);
+        //     responseItem.response.send({'messages':newMessages});
 
+        // }  
+        // responseQueue = [];
+        // newMessages = [];
+    } else {
+        console.log('no new messages');
     }
 });
 
 app.get('/', function(req, res){
-  res.sendfile(path.resolve('../index.html'));
+  res.sendfile(path.resolve('index.html'));
 });
 
-(function clearOldRequests(){
+(function clearTimedoutResponses(){
     setTimeout(function(){
-        var minTime = new Date().getTime() - 30000;
-        for(var i = 0; i < requestQueue.length; i++){
-            if(requestQueue.timestamp < minTime){
-                requestQueue[i].send(200);
-                requestQueue.splice(i, 1);
+        var minTime = new Date().getTime() - 5000;
+        for(var i = 0; i < responseQueue.length; i++){
+            if(responseQueue[i].timestamp < minTime){
+                console.log('cleared one response');
+                responseQueue[i].response.send(200);
+                responseQueue.splice(i, 1);
             }
         }
-        clearOldRequests();
-    }, 3000);
+        clearTimedoutResponses();
+    }, 1000);
 })();
 
 
