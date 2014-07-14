@@ -1,0 +1,11 @@
+{
+  "name": "nodechat",
+  "description": "node chat",
+  "author": "",
+  "dependencies": {
+    "body-parser": "1.4.3",
+    "express": "4.0.x",
+    "sqlite3": "2.2.x",
+    "path": "0.4.x"
+  }
+}
