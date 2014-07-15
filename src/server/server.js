@@ -2,10 +2,13 @@ var express = require('express');
 var path = require('path');
 var bodyparser = require('body-parser');
 var sqlite = require('sqlite3').verbose();
+var jade = require('jade');
 
 var app = express();
-app.use(express.static('public'));
+//app.use(express.static('public'));
+app.use('/public', express.static(__dirname + '/public'));
 app.use( bodyparser.json()); // to support JSON-encoded bodies
+app.locals.pretty = true;
 
 var db = new sqlite.Database(':memory:');
 
@@ -14,7 +17,6 @@ var responseQueue = [];
 
 db.serialize(function(){
     db.run("CREATE TABLE messages (message TEXT)");
-    db.run("INSERT INTO messages VALUES (?)", "hello");
     getRows(logRow);
 });
 
@@ -31,13 +33,11 @@ function getRows(callback){
 
 app.route('/chat').get(function(req, res, next){
     getRows(function(err, rows){
-        result = '';
+        var messages = [];
         for(var i = 0; i < rows.length; i++){
-            var row = rows[i];
-            result += '<p>' + row.message + '</p>' 
-        }
-        res.send(result);   
-
+            messages.push(rows[i].message);
+        } 
+        res.send({'messages': messages});
     });   
 }).post(function(req, res, next){
     console.log('in post');
@@ -68,40 +68,43 @@ app.route('/poll').get(function(req, res, next){
     responseQueue.push(newItem);
     console.log('polling for new messages');
     if(newMessages.length !== 0){
-        console.log('found new messages');
-        // for(var i = 0; i < responseQueue.length; i++){
-        //     var responseItem = responseQueue[i];
-        //     //responseItem.response.send(str);
-        //     responseItem.response.send({'messages':newMessages});
-
-        // }  
-        // responseQueue = [];
-        // newMessages = [];
+        console.log('there are new messages');
     } else {
         console.log('no new messages');
     }
 });
 
 app.get('/', function(req, res){
-  res.sendfile(path.resolve('index.html'));
+    console.log('hi in get');
+  //res.sendfile(path.resolve('index.html'));
+    getRows(function(err, rows){
+        var messages = [];
+        for(var i = 0; i < rows.length; i++){
+            messages.push(rows[i].message);
+        } 
+        console.log(messages);
+        res.render(path.resolve('public/index.jade'), {existingMessages: messages});
+    });
 });
 
 setInterval(function(){
     console.log(responseQueue.length + " responses queued");
 }, 1000);
-// (function clearTimedoutResponses(){
-//     setTimeout(function(){
-//         var minTime = new Date().getTime() - 5000;
-//         for(var i = 0; i < responseQueue.length; i++){
-//             if(responseQueue[i].timestamp < minTime){
-//                 console.log('cleared one response');
-//                 responseQueue[i].response.send(200);
-//                 responseQueue.splice(i, 1);
-//             }
-//         }
-//         clearTimedoutResponses();
-//     }, 1000);
-// })();
+
+//clear old responses that have been stale for over X seconds
+(function clearTimedoutResponses(){
+    setTimeout(function(){
+        var minTime = new Date().getTime() - 10000;
+        for(var i = responseQueue.length - 1; i >= 0 ; i--){
+            if(responseQueue[i].timestamp < minTime){
+                console.log('cleared one response');
+                responseQueue[i].response.send(200);
+                responseQueue.splice(i, 1);
+            }
+        }
+        clearTimedoutResponses();
+    }, 1000);
+})();
 
 
 app.listen(3000);
