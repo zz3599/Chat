@@ -3,7 +3,8 @@ var path = require('path');
 var bodyparser = require('body-parser');
 var sqlite = require('sqlite3').verbose();
 var jade = require('jade');
-
+var ddl = require('./db/ddl');
+var sql = require('sql');
 var app = express();
 //app.use(express.static('public'));
 app.use('/public', express.static(__dirname + '/public'));
@@ -76,7 +77,9 @@ app.route('/poll').get(function(req, res, next){
 
 app.get('/', function(req, res){
     console.log('hi in get');
-  //res.sendfile(path.resolve('index.html'));
+    var newTable = ddl.messagesTable;
+    console.log(newTable.create().toQuery().text);
+    console.log(newTable.select(newTable.star()).from(newTable).toQuery().text);
     getRows(function(err, rows){
         var messages = [];
         for(var i = 0; i < rows.length; i++){
