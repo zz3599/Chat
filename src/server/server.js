@@ -11,15 +11,8 @@ app.use('/public', express.static(__dirname + '/public'));
 app.use( bodyparser.json()); // to support JSON-encoded bodies
 app.locals.pretty = true;
 
-var db = new sqlite.Database(':memory:');
-
 var newMessages = [];
 var responseQueue = [];
-
-db.serialize(function(){
-    db.run("CREATE TABLE messages (message TEXT)");
-    getRows(logRow);
-});
 
 function logRow(err, rows){
     for(var i = 0; i < rows.length; i++){
@@ -28,26 +21,21 @@ function logRow(err, rows){
     }
 }
 
-function getRows(callback){
-    db.all("SELECT rowid, message FROM messages", callback);
-}
-
 app.route('/chat').get(function(req, res, next){
-    getRows(function(err, rows){
+    ddl.getAllMessages(function(err, rows){
         var messages = [];
         for(var i = 0; i < rows.length; i++){
             messages.push(rows[i].message);
         } 
-        res.send({'messages': messages});
-    });   
+        console.log(messages);
+        res.render(path.resolve('public/index.jade'), {existingMessages: messages});
+    }); 
 }).post(function(req, res, next){
-    console.log('in post');
     console.log(req.param('message'));
     var m = req.body.message;
-    console.log('message=' + m);
+    console.log('posted message=' + m);
     if(m){
-        db.run("INSERT INTO messages VALUES(?)", m, function(err){
-            console.log(this);
+        ddl.putMessage(1, 2, m, function(err){
             newMessages.push(m);
             console.log('response queue size: ' + responseQueue.length);
             for(var i = 0; i < responseQueue.length; i++){
@@ -57,10 +45,10 @@ app.route('/chat').get(function(req, res, next){
             }  
             responseQueue = [];
             newMessages = [];
+            ddl.getAllMessages(logRow);
+            console.log('inserted message');
+            res.send(200);
         });
-        getRows(logRow);
-        console.log('inserted message');
-        res.send(200);
     }
 });
 
@@ -73,21 +61,6 @@ app.route('/poll').get(function(req, res, next){
     } else {
         console.log('no new messages');
     }
-});
-
-app.get('/', function(req, res){
-    console.log('hi in get');
-    var newTable = ddl.messagesTable;
-    console.log(newTable.create().toQuery().text);
-    console.log(newTable.select(newTable.star()).from(newTable).toQuery().text);
-    getRows(function(err, rows){
-        var messages = [];
-        for(var i = 0; i < rows.length; i++){
-            messages.push(rows[i].message);
-        } 
-        console.log(messages);
-        res.render(path.resolve('public/index.jade'), {existingMessages: messages});
-    });
 });
 
 setInterval(function(){
