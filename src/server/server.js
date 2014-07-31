@@ -7,7 +7,7 @@ var ddl = require('./db/ddl');
 var app = express();
 
 app.use('/public', express.static(__dirname + '/public'));
-app.use( bodyparser.json()); // to support JSON-encoded bodies
+app.use( bodyparser.json()); // to support JSON-encoded bodies for posts, gets should not be stringifiied
 app.locals.pretty = true;
 
 var newMessages = [];
@@ -31,18 +31,23 @@ app.route('/home').get(function(req, res, next){
 // GET - login
 // POST - register
 app.route('/user').get(function(req, res, next){
-    var userName = req.body.userName;
-    var password = req.body.password
+    var userName = req.param('userName');
+    var password = req.param('password');
+    console.log('trying to login ' + userName);
     if(userName && password){
         ddl.getUser(userName, password, function(err, rows){
-            res.send(rows);
+            if(!rows || rows.length === 0){
+                res.send(404);
+            } else {
+                res.send({userid: rows[0].userId});
+            }
         });
     } else {
-        res.send({message: "Invalid login request"});
+        res.send(404);
     }
 }).post(function(req, res, next){
     var userName = req.body.userName;
-    var password = req.body.password
+    var password = req.body.password;
     if(userName && password){
         ddl.createUser(userName, password, function(err){
             if(err){

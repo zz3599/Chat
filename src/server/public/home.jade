@@ -38,3 +38,20 @@ html(lang="en")
 			return false;
 		});
 
+		$('#loginAction').click(function(e){
+			var userName = $('#userName').val().trim();
+			var password = $('#password').val().trim();
+			if(userName && password){
+				$.ajax("/user", {
+					type: "GET",
+					data: {userName: userName, password: password},
+					contentType: "application/json",
+					success: function(data){
+						console.log('Logged in successfully ' + data.userid);
+						window.location.href = "/chat?userid=" + data.userid;	
+					}
+				});
+			}
+			return false;
+		});
+
