@@ -4,9 +4,8 @@ var bodyparser = require('body-parser');
 var sqlite = require('sqlite3').verbose();
 var jade = require('jade');
 var ddl = require('./db/ddl');
-var sql = require('sql');
 var app = express();
-//app.use(express.static('public'));
+
 app.use('/public', express.static(__dirname + '/public'));
 app.use( bodyparser.json()); // to support JSON-encoded bodies
 app.locals.pretty = true;
@@ -21,17 +20,67 @@ function logRow(err, rows){
     }
 }
 
-app.route('/chat').get(function(req, res, next){
-    ddl.getAllMessages(function(err, rows){
-        var messages = [];
-        for(var i = 0; i < rows.length; i++){
-            messages.push(rows[i].message);
-        } 
-        console.log(messages);
-        res.render(path.resolve('public/index.jade'), {existingMessages: messages});
-    }); 
+// Home /login page
+app.route('/home').get(function(req, res, next){
+    res.render(path.resolve('public/home.jade'), {});
+});
+
+
+
+// User 
+// GET - login
+// POST - register
+app.route('/user').get(function(req, res, next){
+    var userName = req.body.userName;
+    var password = req.body.password
+    if(userName && password){
+        ddl.getUser(userName, password, function(err, rows){
+            res.send(rows);
+        });
+    } else {
+        res.send({message: "Invalid login request"});
+    }
 }).post(function(req, res, next){
-    console.log(req.param('message'));
+    var userName = req.body.userName;
+    var password = req.body.password
+    if(userName && password){
+        ddl.createUser(userName, password, function(err){
+            if(err){
+                console.log("Could not create user: " + err);
+                res.send(404);
+            } else {
+                console.log('inserted user id=' + this.lastID);            
+                res.send({userid: this.lastID});
+            }
+        })
+    }
+});
+
+
+//Url: Chat 
+//Methods: GET/POST
+app.route('/chat').get(function(req, res, next){
+    var userId = req.param('userid');
+    console.log('userid=' + userId);
+    if(!userId){
+        ddl.getAllMessages(function(err, rows){
+            var messages = [];
+            for(var i = 0; i < rows.length; i++){
+                messages.push(rows[i].message);
+            } 
+            console.log(messages);
+            res.render(path.resolve('public/index.jade'), {existingMessages: messages});
+        }); 
+    } else {
+        ddl.getUserChatHistory(userId, function(err, rows){
+            console.log(rows.length + ' rows returned');
+            for(var i = 0; i < rows.length; i++){
+                console.log(rows[i]);
+            }
+            res.send(rows);
+        });
+    }
+}).post(function(req, res, next){
     var m = req.body.message;
     console.log('posted message=' + m);
     if(m){
@@ -52,6 +101,7 @@ app.route('/chat').get(function(req, res, next){
     }
 });
 
+//Url: Poll
 app.route('/poll').get(function(req, res, next){
     var newItem = {'response': res, 'timestamp' : new Date().getTime()};
     responseQueue.push(newItem);
@@ -63,6 +113,7 @@ app.route('/poll').get(function(req, res, next){
     }
 });
 
+//LOGGING
 setInterval(function(){
     console.log(responseQueue.length + " responses queued");
 }, 1000);
