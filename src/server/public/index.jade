@@ -15,7 +15,7 @@ html(lang="en")
 	body
 		ul#messages
 			each item in existingMessages
-				li=item
+				li=item.senderName + item.message
 		form(id='sendMessage', action='')
 			input(id='m', autocomplete='off')
 			button.

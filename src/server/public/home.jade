@@ -16,10 +16,11 @@ html(lang="en")
 		form(id='login', action='')
 			input(id='userName', autocomplete='off')
 			input(id='password', autocomplete='off')
-			button(id='loginAction').
-				Login
-			button(id='registerAction').
-				Register
+			div
+				button(id='loginAction').
+					Login
+				button(id='registerAction').
+					Register
 	script.
 		$('#registerAction').click(function(e){
 			var userName = $('#userName').val().trim();

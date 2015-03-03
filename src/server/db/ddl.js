@@ -5,16 +5,17 @@ var db = new sqlite.Database('chatdb', function(){
         db.run("DROP TABLE IF EXISTS messages");
         db.run("DROP TABLE IF EXISTS users");
         db.run("CREATE TABLE IF NOT EXISTS users (userId INTEGER PRIMARY KEY, userName TEXT UNIQUE, password TEXT);");
-        db.run("CREATE TABLE IF NOT EXISTS messages (messageId INTEGER PRIMARY KEY, senderId INTEGER REFERENCES users(userId), \
-            receiverId INTEGER REFERENCES users(userId), message TEXT)");
+        db.run("CREATE TABLE IF NOT EXISTS messages (messageId INTEGER PRIMARY KEY, \
+            senderId INTEGER REFERENCES users(userId),                              \
+            receiverId INTEGER REFERENCES users(userId), message TEXT, INTEGER timestamp)");
         db.run("INSERT INTO users VALUES(?, ?, ?)", null, "brook", "brook");
         db.run("INSERT INTO users VALUES(?, ?, ?)", null, "thomas", "thomas");
     });
 });
 // call internal stuff with exports.[func_name]
 module.exports = {
-    putMessage: function(senderId, receiverId, message, callback){
-        db.run("INSERT INTO messages VALUES(?, ?, ?, ?)", null, senderId, receiverId, message, callback);
+    putMessage: function(senderId, receiverId, message, timestamp, callback){
+        db.run("INSERT INTO messages VALUES(?, ?, ?, ?, ?)", null, senderId, receiverId, message, timestamp, callback);
     },
     createUser: function(userName, password, callback){
         db.run("INSERT INTO users VALUES(?, ?, ?)", null, userName, password, callback);

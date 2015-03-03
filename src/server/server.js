@@ -20,6 +20,19 @@ function logRow(err, rows){
     }
 }
 
+function deepDump(o){
+    for(prop in o){
+        if(o.hasOwnProperty(prop)){
+            console.log(prop + '=>' + o[prop]);
+            if(typeof(o[prop]) =='object'){
+                deepDump(o[prop]);
+            }
+        }
+    }
+}
+
+function Message(id, senderid, receiverid, message, timestamp){
+}
 // Home /login page
 app.route('/home').get(function(req, res, next){
     res.render(path.resolve('public/home.jade'), {});
@@ -34,11 +47,14 @@ app.route('/user').get(function(req, res, next){
     var userName = req.param('userName');
     var password = req.param('password');
     console.log('trying to login ' + userName);
+    //    deepDump(req);
     if(userName && password){
         ddl.getUser(userName, password, function(err, rows){
             if(!rows || rows.length === 0){
+                console.log('user does not exist');
                 res.send(404);
             } else {
+                console.log('logged in');
                 res.send({userid: rows[0].userId});
             }
         });
@@ -71,7 +87,7 @@ app.route('/chat').get(function(req, res, next){
         ddl.getAllMessages(function(err, rows){
             var messages = [];
             for(var i = 0; i < rows.length; i++){
-                messages.push(rows[i].message);
+                messages.push({'message': rows[i].message});
             } 
             console.log(messages);
             res.render(path.resolve('public/index.jade'), {existingMessages: messages});
@@ -79,17 +95,21 @@ app.route('/chat').get(function(req, res, next){
     } else {
         ddl.getUserChatHistory(userId, function(err, rows){
             console.log(rows.length + ' rows returned');
+            var messages = [];
             for(var i = 0; i < rows.length; i++){
-                console.log(rows[i]);
+                messages.push({'message':rows[i].message, 'senderName': rows[i].senderName});
             }
-            res.send(rows);
+            console.log(messages);
+            //            res.send(rows);
+            res.render(path.resolve('public/index.jade'), {existingMessages: messages});
         });
     }
 }).post(function(req, res, next){
     var m = req.body.message;
     console.log('posted message=' + m);
+    console.log('target userid=' + req.body.userid);
     if(m){
-        ddl.putMessage(1, 2, m, function(err){
+        ddl.putMessage(1, 2, m, new Date().getTime(), function(err){
             newMessages.push(m);
             console.log('response queue size: ' + responseQueue.length);
             for(var i = 0; i < responseQueue.length; i++){
@@ -101,9 +121,9 @@ app.route('/chat').get(function(req, res, next){
             newMessages = [];
             ddl.getAllMessages(logRow);
             console.log('inserted message');
-            res.send(200);
         });
     }
+    res.send(200);
 });
 
 //Url: Poll
@@ -137,6 +157,7 @@ setInterval(function(){
         clearTimedoutResponses();
     }, 1000);
 })();
+
 
 
 app.listen(3000);
