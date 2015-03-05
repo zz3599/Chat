@@ -1,4 +1,5 @@
 var express = require('express');
+var events = require('events');
 var path = require('path');
 var bodyparser = require('body-parser');
 var sqlite = require('sqlite3').verbose();
@@ -37,8 +38,6 @@ function Message(id, senderid, receiverid, message, timestamp){
 app.route('/home').get(function(req, res, next){
     res.render(path.resolve('public/home.jade'), {});
 });
-
-
 
 // User 
 // GET - login
@@ -93,7 +92,7 @@ app.route('/chat').get(function(req, res, next){
             res.render(path.resolve('public/index.jade'), {existingMessages: messages});
         }); 
     } else {
-        ddl.getUserChatHistory(userId, function(err, rows){
+        /*        ddl.getUserChatHistory(userId, function(err, rows){
             console.log(rows.length + ' rows returned');
             var messages = [];
             for(var i = 0; i < rows.length; i++){
@@ -102,14 +101,14 @@ app.route('/chat').get(function(req, res, next){
             console.log(messages);
             //            res.send(rows);
             res.render(path.resolve('public/index.jade'), {existingMessages: messages});
-        });
+            });*/
     }
 }).post(function(req, res, next){
     var m = req.body.message;
     console.log('posted message=' + m);
     console.log('target userid=' + req.body.userid);
     if(m){
-        ddl.putMessage(1, 2, m, new Date().getTime(), function(err){
+        ddl.putMessage(1, 1, m, new Date().getTime(), function(err){
             newMessages.push(m);
             console.log('response queue size: ' + responseQueue.length);
             for(var i = 0; i < responseQueue.length; i++){
@@ -127,6 +126,7 @@ app.route('/chat').get(function(req, res, next){
 });
 
 //Url: Poll
+//Listens to the message eventemitter and does no DB reads
 app.route('/poll').get(function(req, res, next){
     var newItem = {'response': res, 'timestamp' : new Date().getTime()};
     responseQueue.push(newItem);

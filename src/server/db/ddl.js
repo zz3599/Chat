@@ -4,12 +4,23 @@ var db = new sqlite.Database('chatdb', function(){
         db.run("PRAGMA foreign_keys=on");
         db.run("DROP TABLE IF EXISTS messages");
         db.run("DROP TABLE IF EXISTS users");
-        db.run("CREATE TABLE IF NOT EXISTS users (userId INTEGER PRIMARY KEY, userName TEXT UNIQUE, password TEXT);");
-        db.run("CREATE TABLE IF NOT EXISTS messages (messageId INTEGER PRIMARY KEY, \
-            senderId INTEGER REFERENCES users(userId),                              \
-            receiverId INTEGER REFERENCES users(userId), message TEXT, INTEGER timestamp)");
-        db.run("INSERT INTO users VALUES(?, ?, ?)", null, "brook", "brook");
-        db.run("INSERT INTO users VALUES(?, ?, ?)", null, "thomas", "thomas");
+        db.run("DROP TABLE IF EXISTS groups");
+        db.run("CREATE TABLE IF NOT EXISTS users " + 
+               "(userId INTEGER PRIMARY KEY, " + 
+               "userName TEXT UNIQUE, " +
+               "password TEXT);");
+        db.run("CREATE TABLE IF NOT EXISTS groups " +
+               "(groupId INTEGER," +
+               "userId INTEGER REFERENCES users(userId)," + 
+               "PRIMARY KEY(groupId, userId))");
+        db.run("CREATE TABLE IF NOT EXISTS messages " + 
+               "(messageId INTEGER PRIMARY KEY, " +
+               "senderId INTEGER REFERENCES users(userId)," + 
+               "receiverId INTEGER REFERENCES groups(groupId)," + 
+               "message TEXT, " + 
+               "INTEGER timestamp)");
+        db.run("INSERT INTO users(userName, password) VALUES(?, ?), (?, ?)", "brook", "brook", "cody", "cody");
+        db.run("INSERT INTO groups(groupId, userId) VALUES(?, ?), (?, ?)", [1,1], [1,2]);
     });
 });
 // call internal stuff with exports.[func_name]
@@ -26,16 +37,14 @@ module.exports = {
     getUser: function(userName, password, callback){
         db.all("SELECT userId from users WHERE userName=? and password=?", userName, password, callback);
     },
-    getPairChatHistory: function(userId, senderId, callback){
-        db.all("SELECT m.senderId, u.userName as senderName, m.message from messages as m  \
-            INNER JOIN users as u on m.senderId=u.userId \
-            WHERE m.receiverId IN (?, ?) and m.senderId IN (?, ?)", userId, senderId, userId, senderId, callback);
+    getGroupChatHistory: function(groupId, callback){
+        db.all("SELECT m.senderId, u.userName as senderName, m.message from messages as m  " + 
+            "INNER JOIN users as u on m.senderId=u.userId " + 
+            "WHERE m.receiverId=?", groupId, callback);
     },
-    getUserChatHistory: function(userId, callback){
-        db.all("SELECT m.senderId, u.userName as senderName, u2.userName as receiverName, m.message from messages as m  \
-            LEFT JOIN users as u on m.senderId=u.userId \
-            LEFT JOIN users as u2 on m.receiverId=u2.userId \
-            WHERE m.receiverId=? or m.senderId=?", [userId, userId], callback);
+    getGroupsAndUsers: function(userId, callback){
+        db.all("SELECT g.groupId, g.userId from group as g " + 
+               "WHERE g.groupId in (SELECT groupId from group WHERE userId=?)", userId, callback); 
     },
     getAllMessages: function(callback){
         db.all("SELECT rowid, message from messages", callback);
