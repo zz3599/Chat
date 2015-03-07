@@ -11,6 +11,16 @@ app.use('/public', express.static(__dirname + '/public'));
 app.use( bodyparser.json()); // to support JSON-encoded bodies for posts, gets should not be stringifiied
 app.locals.pretty = true;
 
+var groupListeners = {};
+function getGroupListener(groupId){
+    var eventEmitter = groupListeners[groupId];
+    if(eventEmitter === undefined){
+        eventEmitter = events.EventEmitter();
+        groupListeners[groupId] = eventEmitter;
+    }
+    return eventEmitter; 
+}
+
 var newMessages = [];
 var responseQueue = [];
 
@@ -32,8 +42,6 @@ function deepDump(o){
     }
 }
 
-function Message(id, senderid, receiverid, message, timestamp){
-}
 // Home /login page
 app.route('/home').get(function(req, res, next){
     res.render(path.resolve('public/home.jade'), {});
@@ -92,6 +100,14 @@ app.route('/chat').get(function(req, res, next){
             res.render(path.resolve('public/index.jade'), {existingMessages: messages});
         }); 
     } else {
+        ddl.getUsergroups(userId, function(err, rows){
+            console.log(rows);
+            for(var i = 0; i < rows.length; i++){
+                console.log(i + ' ' +  rows[i]);
+            }
+            console.log('woo');
+
+        });
         /*        ddl.getUserChatHistory(userId, function(err, rows){
             console.log(rows.length + ' rows returned');
             var messages = [];
