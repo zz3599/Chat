@@ -48,7 +48,6 @@ module.exports = {
         } else {
             callback(null);
         }
-
     },
     //messages
     putMessage: function(senderId, receiverId, message, timestamp, callback){

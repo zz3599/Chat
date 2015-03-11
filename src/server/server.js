@@ -11,12 +11,23 @@ app.use('/public', express.static(__dirname + '/public'));
 app.use( bodyparser.json()); // to support JSON-encoded bodies for posts, gets should not be stringifiied
 app.locals.pretty = true;
 
-var groupListeners = {};
-function getGroupListener(groupId){
-    var eventEmitter = groupListeners[groupId];
+var groupUsermap = {};
+var userEmitterMap = {};
+function putUserIntoGroup(userid, groupid){
+    var userids = groupUsermap[groupid];
+    if(userids === undefined){
+        groupUsermap[groupid] = [userid];
+    } else if(userids instanceof Array){
+        groupUsermap[groupid].push(userid);
+    } else {
+        throw "groupUserId map has value of type " + typeof(groupUsermap[groupid]);
+    }
+}
+function getUserEmitter(userid){
+    var eventEmitter = userEmitterMap[userid];
     if(eventEmitter === undefined){
-        eventEmitter = events.EventEmitter();
-        groupListeners[groupId] = eventEmitter;
+        eventEmitter = new events.EventEmitter();
+        userEmitterMap[userid] = eventEmitter;
     }
     return eventEmitter; 
 }
@@ -91,33 +102,18 @@ app.route('/chat').get(function(req, res, next){
     var userId = req.param('userid');
     console.log('userid=' + userId);
     if(!userId){
-        ddl.getAllMessages(function(err, rows){
-            var messages = [];
-            for(var i = 0; i < rows.length; i++){
-                messages.push({'message': rows[i].message});
-            } 
-            console.log(messages);
-            res.render(path.resolve('public/index.jade'), {existingMessages: messages});
-        }); 
+                
+        //        res.render(path.resolve('public/home.jade'), {});
     } else {
         ddl.getUsergroups(userId, function(err, rows){
             console.log(rows);
             for(var i = 0; i < rows.length; i++){
-                console.log(i + ' ' +  rows[i]);
+                console.log("groupid: " + rows[i].groupId);
+                putUserIntoGroup(userId, rows[i].groupId);
             }
-            console.log('woo');
-
+            console.log(groupUsermap);
+            res.render(path.resolve('public/index.jade'), {'existingMessages':[]});
         });
-        /*        ddl.getUserChatHistory(userId, function(err, rows){
-            console.log(rows.length + ' rows returned');
-            var messages = [];
-            for(var i = 0; i < rows.length; i++){
-                messages.push({'message':rows[i].message, 'senderName': rows[i].senderName});
-            }
-            console.log(messages);
-            //            res.send(rows);
-            res.render(path.resolve('public/index.jade'), {existingMessages: messages});
-            });*/
     }
 }).post(function(req, res, next){
     var m = req.body.message;
@@ -127,12 +123,8 @@ app.route('/chat').get(function(req, res, next){
         ddl.putMessage(1, 1, m, new Date().getTime(), function(err){
             newMessages.push(m);
             console.log('response queue size: ' + responseQueue.length);
-            for(var i = 0; i < responseQueue.length; i++){
-                var responseItem = responseQueue[i];
-                //responseItem.response.send(str);
-                responseItem.response.send({'messages':newMessages});
-            }  
-            responseQueue = [];
+            var emitter = getUserEmitter(1);
+            emitter.emit('newMessage', m);
             newMessages = [];
             ddl.getAllMessages(logRow);
             console.log('inserted message');
@@ -145,13 +137,20 @@ app.route('/chat').get(function(req, res, next){
 //Listens to the message eventemitter and does no DB reads
 app.route('/poll').get(function(req, res, next){
     var newItem = {'response': res, 'timestamp' : new Date().getTime()};
-    responseQueue.push(newItem);
-    console.log('polling for new messages');
+    //    responseQueue.push(newItem);
+    console.log('polling for new messages for user id=' + req.userid);
     if(newMessages.length !== 0){
         console.log('there are new messages');
     } else {
         console.log('no new messages');
     }
+    var userid=1;
+    var userEmitter = getUserEmitter(userid);
+    userEmitter.removeAllListeners();
+    userEmitter.once('newMessage', function(data){
+        console.log('received newMesage: ' + data);
+        res.send({'messages':[data]});
+    });
 });
 
 //LOGGING
@@ -172,7 +171,7 @@ setInterval(function(){
         }
         clearTimedoutResponses();
     }, 1000);
-})();
+})//();
 
 
 
