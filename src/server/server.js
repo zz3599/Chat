@@ -2,13 +2,16 @@ var express = require('express');
 var events = require('events');
 var path = require('path');
 var bodyparser = require('body-parser');
-var sqlite = require('sqlite3').verbose();
-var jade = require('jade');
 var ddl = require('./db/ddl');
+var cookieSession = require('cookie-session');
 var app = express();
 
 app.use('/public', express.static(__dirname + '/public'));
 app.use( bodyparser.json()); // to support JSON-encoded bodies for posts, gets should not be stringifiied
+app.use(cookieSession({
+    secret: 'NOTSECRET'
+}));
+
 app.locals.pretty = true;
 
 var groupUsermap = {};
@@ -18,7 +21,7 @@ function putUserIntoGroup(userid, groupid){
     if(userids === undefined){
         groupUsermap[groupid] = [userid];
     } else if(userids instanceof Array){
-        groupUsermap[groupid].push(userid);
+        userids.push(userid);
     } else {
         throw "groupUserId map has value of type " + typeof(groupUsermap[groupid]);
     }
@@ -102,23 +105,29 @@ app.route('/chat').get(function(req, res, next){
     var userId = req.param('userid');
     console.log('userid=' + userId);
     if(!userId){
-                
-        //        res.render(path.resolve('public/home.jade'), {});
+        res.render(path.resolve('public/home.jade'), {});
     } else {
+        //persist userid in session
+        req.session.userId = userId;
         ddl.getUsergroups(userId, function(err, rows){
             console.log(rows);
+            var groupIds = [];
             for(var i = 0; i < rows.length; i++){
-                console.log("groupid: " + rows[i].groupId);
+                console.log("userId " + userId + " in groupid: " + rows[i].groupId);
                 putUserIntoGroup(userId, rows[i].groupId);
+                groupIds.push(rows[i].groupId);
             }
             console.log(groupUsermap);
-            res.render(path.resolve('public/index.jade'), {'existingMessages':[]});
+            ddl.getGrouplistChatHistory(groupIds, function(err, rows){
+                    console.log(rows);
+                    res.render(path.resolve('public/index.jade'), {'existingMessages':[]});
+            });
         });
     }
 }).post(function(req, res, next){
     var m = req.body.message;
     console.log('posted message=' + m);
-    console.log('target userid=' + req.body.userid);
+    console.log('from=' + req.session.userId + ',target userid=' + req.body.userId);
     if(m){
         ddl.putMessage(1, 1, m, new Date().getTime(), function(err){
             newMessages.push(m);
@@ -138,7 +147,7 @@ app.route('/chat').get(function(req, res, next){
 app.route('/poll').get(function(req, res, next){
     var newItem = {'response': res, 'timestamp' : new Date().getTime()};
     //    responseQueue.push(newItem);
-    console.log('polling for new messages for user id=' + req.userid);
+    console.log('polling for new messages for user id=' + req.session.userId);
     if(newMessages.length !== 0){
         console.log('there are new messages');
     } else {

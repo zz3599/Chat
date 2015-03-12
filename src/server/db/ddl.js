@@ -23,12 +23,16 @@ var db = new sqlite.Database('chatdb', function(){
                "receiverId INTEGER REFERENCES groups(groupId)," + //the receiver of a message is always a group of >=2 people
                "message TEXT, " + 
                "INTEGER timestamp)");
-        db.run("INSERT INTO users(userName, password) VALUES(?, ?), (?, ?)", "brook", "brook", "cody", "cody");
-        db.run("INSERT INTO groups(groupId, groupName) VALUES(?, ?)", null, "brookandcody");
-        db.run("INSERT INTO userGroups VALUES(?, ?)", [1,1]);
-        db.run("INSERT INTO userGroups VALUES(?, ?)", [1,2]);
+        //3 users, 4 groups - abc, ab, bc, ac
+        db.run("INSERT INTO users(userName, password) VALUES(?, ?), (?, ?), (?, ?)", "auser", "auser", "buser", "buser", "cuser", "buser");
+        db.run("INSERT INTO groups(groupId, groupName) VALUES(?, ?), (?, ?), (?, ?), (?,?)", null, "abc", null, "ab", null, "bc", null, "ac");
+        db.run("INSERT INTO userGroups VALUES(?, ?), (?, ?), (?, ?)", [1,1, 1, 2, 1,3]);
+        db.run("INSERT INTO userGroups VALUES(?, ?), (?, ?)", [2,1, 2,2]);
+        db.run("INSERT INTO userGroups VALUES(?, ?), (?, ?)", [3,2,3,3]);        
+        db.run("INSERT INTO userGroups VALUES(?, ?), (?, ?)", [4,1,4,3]);                
     });
 });
+
 // call internal stuff with exports.[func_name]
 module.exports = {
     //groups
@@ -39,11 +43,10 @@ module.exports = {
     },    
     createGroup: function(userIdArray, callback){
         if(Array.isArray(userIdArray)){
-            var query = "INSERT INTO userGroups VALUES (";
-            for(var i = 0; i < userIdArray.length-1; i++){
-              query += "?";
-            }
-            query += "?)";
+            var query = "INSERT INTO userGroups VALUES (" + 
+              Array.apply(null, new Array(userIdArray.length))
+                .map(function(){return '?';}).join(',') +
+              ")";
             db.run(query, userIdArray, callback);
         } else {
             callback(null);
@@ -53,7 +56,16 @@ module.exports = {
     putMessage: function(senderId, receiverId, message, timestamp, callback){
         db.run("INSERT INTO messages VALUES(?, ?, ?, ?, ?)", null, senderId, receiverId, message, timestamp, callback);
     },
-    
+    getGrouplistChatHistory: function(groupIds, callback){
+        //should be a list of group ids 
+        var argList = '(' + Array.apply(null, new Array(groupIds.length)).
+          map(function(){ return '?';}).join(',') + ')';
+        db.all("SELECT m.senderId, u.userName as senderName, m.receiverId, m.message " +
+            "FROM messages as m  " + 
+            "INNER JOIN users as u on m.senderId=u.userId " + 
+            "WHERE m.receiverId in " + argList , groupIds, callback);
+        
+    },
     getGroupChatHistory: function(groupId, callback){
         db.all("SELECT m.senderId, u.userName as senderName, m.message from messages as m  " + 
             "INNER JOIN users as u on m.senderId=u.userId " + 
