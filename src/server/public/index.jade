@@ -17,10 +17,8 @@ html(lang="en")
 		script(src='./public/jquery-1.11.1.min.js')
 	body
 		div.fixTop
-			each group, users in groups				
-				div.floatLeft.groupBox=group
-					each user in users
-						user
+			each users, group in groups				
+				div.floatLeft.groupBox(id=group + 'group')=users
 		ul#messages
 			each item in existingMessages
 				li=item.senderName + ':' + item.message
