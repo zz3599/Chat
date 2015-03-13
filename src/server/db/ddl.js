@@ -37,9 +37,10 @@ var db = new sqlite.Database('chatdb', function(){
 module.exports = {
     //groups
     getUsergroups: function(userId, callback){
-        db.all("SELECT userGroups.groupId, userGroups.userId, users.userName FROM " + 
-        "userGroups INNER JOIN users ON " + 
-        "userGroups.userId=users.userId WHERE userGroups.userId=?", userId, callback);
+        db.all("SELECT g.groupId, g.userId, u.userName FROM " + 
+        "userGroups as g INNER JOIN users as u ON " + 
+        "g.userId=u.userId WHERE g.groupId in " + 
+        "(SELECT groupId from userGroups where userId=?) ORDER BY g.groupId", userId, callback);
     },    
     createGroup: function(userIdArray, callback){
         if(Array.isArray(userIdArray)){

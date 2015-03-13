@@ -14,8 +14,10 @@ app.use(cookieSession({
 
 app.locals.pretty = true;
 
+
 var groupUsermap = {};
 var userEmitterMap = {};
+
 function putUserIntoGroup(userid, groupid){
     var userids = groupUsermap[groupid];
     if(userids === undefined){
@@ -111,17 +113,33 @@ app.route('/chat').get(function(req, res, next){
         req.session.userId = userId;
         ddl.getUsergroups(userId, function(err, rows){
             console.log(rows);
+            // groupid -> [usernames not of this user - for displaying purposes]
+            var groupUsernames = {};
+            var prevGroupId = -1;
             var groupIds = [];
             for(var i = 0; i < rows.length; i++){
-                console.log("userId " + userId + " in groupid: " + rows[i].groupId);
-                putUserIntoGroup(userId, rows[i].groupId);
-                groupIds.push(rows[i].groupId);
+                if(req.session.userId != rows[i].userId){                    
+                    if(rows[i].groupId in groupUsernames){
+                        groupUsernames[rows[i].groupId].push(rows[i].userName);
+                    } else {
+                        groupUsernames[rows[i].groupId] = [rows[i].userName];
+                    }                    
+                }
+                if(rows[i].groupId != prevGroupId){
+                    putUserIntoGroup(userId, rows[i].groupId);
+                    prevGroupId = rows[i].groupId;
+                    groupIds.push(rows[i].groupId);
+                }                
             }
+            console.log(groupUsernames);
             console.log(groupUsermap);
-            ddl.getGrouplistChatHistory(groupIds, function(err, rows){
-                    console.log(rows);
-                    res.render(path.resolve('public/index.jade'), {'existingMessages':[]});
+            ddl.getGrouplistChatHistory(groupIds, function(err, messages){                
+                //don't render yet
+                res.render(path.resolve('public/index.jade'), {'existingMessages':[], 'groups': groupUsernames});
+                req.session.messages = messages;
+                console.log(req.session.messages);
             });
+
         });
     }
 }).post(function(req, res, next){
@@ -129,7 +147,7 @@ app.route('/chat').get(function(req, res, next){
     console.log('posted message=' + m);
     console.log('from=' + req.session.userId + ',target userid=' + req.body.userId);
     if(m){
-        ddl.putMessage(1, 1, m, new Date().getTime(), function(err){
+        ddl.putMessage(req.session.userId, 1, m, new Date().getTime(), function(err){
             newMessages.push(m);
             console.log('response queue size: ' + responseQueue.length);
             var emitter = getUserEmitter(1);

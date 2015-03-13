@@ -11,11 +11,19 @@ html(lang="en")
 			#messages { list-style-type: none; margin: 0; padding: 0; }
 			#messages li { padding: 5px 10px; }
 			#messages li:nth-child(odd) { background: #eee; }
+			.fixTop { position: fixed; top: 0; }
+			.floatLeft {float:left;}
+			.groupBox {width:100px; text-align: center; border-style: solid; border-width: 1px;}
 		script(src='./public/jquery-1.11.1.min.js')
 	body
+		div.fixTop
+			each group, users in groups				
+				div.floatLeft.groupBox=group
+					each user in users
+						user
 		ul#messages
 			each item in existingMessages
-				li=item.senderName + item.message
+				li=item.senderName + ':' + item.message
 		form(id='sendMessage', action='')
 			input(id='m', autocomplete='off')
 			button.
