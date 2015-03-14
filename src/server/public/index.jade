@@ -8,7 +8,7 @@ html(lang="en")
 			form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
 			form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
 			form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
-			#messages { list-style-type: none; margin: 0; padding: 0; }
+			#messages { list-style-type: none; margin: 50px; padding: 0; top: 50px;}
 			#messages li { padding: 5px 10px; }
 			#messages li:nth-child(odd) { background: #eee; }
 			.fixTop { position: fixed; top: 0; }
@@ -27,12 +27,13 @@ html(lang="en")
 			button.
 				Send
 	script.
+		var receiverGroupId;
 		$('#sendMessage').submit(function(e){
 			var m = $('#m').val().trim();
 			if(m){
-				$.ajax("/chat", {
+				$.ajax("/message", {
 					type: "POST",
-					data: JSON.stringify({message: m}),
+					data: JSON.stringify({message: m, receiverGroupId: 	receiverGroupId}),
 					contentType: "application/json",
 					success: function(data){
 						console.log(data);
@@ -46,7 +47,7 @@ html(lang="en")
 		(function poll(){
 			setTimeout(function(){
 				$.ajax('/poll', {
-					complete: poll,
+					complete: poll,					
 					success: function(data){
 						console.log(data);
 						if(data.messages){
@@ -58,4 +59,13 @@ html(lang="en")
 				});
 			}, 100);
 		})();
+
+		$('div.floatLeft.groupBox').click(function(){
+			var groupId = $(this).attr('id');
+			$.get('/message', {groupId: groupId}, function(data){
+				console.log(data);
+				console.log('selected receiverGroupId=' + groupId);
+				receiverGroupId = groupId.replace('group', '');
+			});
+		});
 

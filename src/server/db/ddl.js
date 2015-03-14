@@ -52,7 +52,7 @@ module.exports = {
         } else {
             callback(null);
         }
-    },
+    },    
     //messages
     putMessage: function(senderId, receiverId, message, timestamp, callback){
         db.run("INSERT INTO messages VALUES(?, ?, ?, ?, ?)", null, senderId, receiverId, message, timestamp, callback);
@@ -61,7 +61,7 @@ module.exports = {
         //should be a list of group ids 
         var argList = '(' + Array.apply(null, new Array(groupIds.length)).
           map(function(){ return '?';}).join(',') + ')';
-        db.all("SELECT m.senderId, u.userName as senderName, m.receiverId, m.message " +
+        db.all("SELECT m.senderId, u.userName as senderName, m.receiverId as groupId, m.message, m.timestamp " +
             "FROM messages as m  " + 
             "INNER JOIN users as u on m.senderId=u.userId " + 
             "WHERE m.receiverId in " + argList , groupIds, callback);
