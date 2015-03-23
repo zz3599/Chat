@@ -40,7 +40,9 @@ function putUserIntoGroup(userid, groupid){
     if(userids === undefined){
         groupUsermap[groupid] = [userid];
     } else if(userids instanceof Array){
-        userids.push(userid);
+        if(userids.indexOf(userid) === -1){
+            userids.push(userid);
+        }
     } else {
         throw "groupUserId map has value of type " + typeof(groupUsermap[groupid]);
     }
@@ -96,7 +98,8 @@ app.route('/user').get(function(req, res, next){
                 console.log('user does not exist');
                 res.send(404);
             } else {
-                console.log('logged in');
+                console.log('logged in userid=' + rows[0].userId);
+                //persist userid in session
                 req.session.userId = rows[0].userId;
                 res.send({userid: rows[0].userId});
             }
@@ -124,21 +127,19 @@ app.route('/user').get(function(req, res, next){
 //Url: Chat - chat page
 //Methods: GET/POST
 app.route('/chat').get(function(req, res, next){
-    var userId = req.param('userid');
-    console.log('userid=' + userId);
+    var userId = req.param('id');//req.session.userId;
     if(!userId){
         res.render(path.resolve('public/home.jade'), {});
     } else {
-        //persist userid in session
-        console.log(req.session.userId);
-        ddl.getUsergroups(userId, function(err, rows){
+        console.log("userid=" + userId);
+        ddl.getUsergroups(req.session.userId, function(err, rows){
             console.log(rows);
             // groupid -> [usernames not of this user - for displaying purposes]
             var groupUsernames = {};
             var prevGroupId = -1;
-            var groupIds = [];
+
             for(var i = 0; i < rows.length; i++){
-                if(req.session.userId != rows[i].userId){                    
+                if(userId != rows[i].userId){                    
                     if(rows[i].groupId in groupUsernames){
                         groupUsernames[rows[i].groupId].push(rows[i].userName);
                     } else {
@@ -148,12 +149,12 @@ app.route('/chat').get(function(req, res, next){
                 if(rows[i].groupId != prevGroupId){
                     putUserIntoGroup(userId, rows[i].groupId);
                     prevGroupId = rows[i].groupId;
-                    groupIds.push(rows[i].groupId);
                 }                
             }
             console.log(groupUsernames);
             console.log(groupUsermap); //global var populated/            
             res.render(path.resolve('public/index.jade'), {'existingMessages':[], 'groups': groupUsernames});            
+           
 
         });
     }    
@@ -165,12 +166,11 @@ app.route('/chat').get(function(req, res, next){
 app.route('/message').get(function(req, res, next){
     var groupId = req.param('groupId');
     console.log('/message, groupid=' + groupId);
-    deepDump(req.session);
-    if(req.session.messages && groupId in req.session.messages){
-        res.send(req.session.messages[groupId]);
-    } else {
-        res.send([]);
-    }
+    ddl.getGroupChatHistory(groupId, function(err, rows){
+        
+        console.log(rows);
+        res.send(rows);
+    });
 }).post(function(req, res, next){
     var m = req.body.message;
     var receiverGroupId = req.body.receiverGroupId;
@@ -179,8 +179,8 @@ app.route('/message').get(function(req, res, next){
     if(m){
         ddl.putMessage(req.session.userId, receiverGroupId, m, new Date().getTime(), function(err){
             newMessages.push(m);
-            console.log('response queue size: ' + responseQueue.length);
             var usersInGroup = groupUsermap[receiverGroupId];
+            console.log(usersInGroup.length + ' users in the group');
             if(usersInGroup){
                 //emit events to all users in the group
                 for(var i = 0; i < usersInGroup.length; i++){
@@ -212,10 +212,6 @@ app.route('/poll').get(function(req, res, next){
     });
 });
 
-//LOGGING
-setInterval(function(){
-    console.log(responseQueue.length + " responses queued");
-}, 1000);
 
 //clear old responses that have been stale for over X seconds
 (function clearTimedoutResponses(){
