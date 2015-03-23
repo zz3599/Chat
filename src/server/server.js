@@ -101,6 +101,7 @@ app.route('/user').get(function(req, res, next){
                 console.log('logged in userid=' + rows[0].userId);
                 //persist userid in session
                 req.session.userId = rows[0].userId;
+                req.session.userName = userName;
                 res.send({userid: rows[0].userId});
             }
         });
@@ -167,7 +168,6 @@ app.route('/message').get(function(req, res, next){
     var groupId = req.param('groupId');
     console.log('/message, groupid=' + groupId);
     ddl.getGroupChatHistory(groupId, function(err, rows){
-        
         console.log(rows);
         res.send(rows);
     });
@@ -177,7 +177,8 @@ app.route('/message').get(function(req, res, next){
     console.log('posted message=' + m);
     console.log('from=' + req.session.userId + ',target groupid=' + receiverGroupId);
     if(m){
-        ddl.putMessage(req.session.userId, receiverGroupId, m, new Date().getTime(), function(err){
+        var timestamp = new Date().getTime();
+        ddl.putMessage(req.session.userId, receiverGroupId, m, timestamp, function(err){
             newMessages.push(m);
             var usersInGroup = groupUsermap[receiverGroupId];
             console.log(usersInGroup.length + ' users in the group');
@@ -185,7 +186,7 @@ app.route('/message').get(function(req, res, next){
                 //emit events to all users in the group
                 for(var i = 0; i < usersInGroup.length; i++){
                     var emitter = getUserEmitter(usersInGroup[i]); 
-                    emitter.emit('newMessage', m);     
+                    emitter.emit('newMessage', {message: m, timestamp: timestamp, senderName: req.session.userName});     
                 }
             }
             console.log('inserted message');

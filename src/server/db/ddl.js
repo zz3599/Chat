@@ -22,9 +22,9 @@ var db = new sqlite.Database('chatdb', function(){
                "senderId INTEGER REFERENCES users(userId)," + 
                "receiverId INTEGER REFERENCES groups(groupId)," + //the receiver of a message is always a group of >=2 people
                "message TEXT, " + 
-               "INTEGER timestamp)");
+               "timestamp INTEGER)");
         //3 users, 4 groups - abc, ab, bc, ac
-        db.run("INSERT INTO users(userName, password) VALUES(?, ?), (?, ?), (?, ?)", "auser", "auser", "buser", "buser", "cuser", "buser");
+        db.run("INSERT INTO users(userName, password) VALUES(?, ?), (?, ?), (?, ?)", "auser", "auser", "buser", "buser", "cuser", "cuser");
         db.run("INSERT INTO groups(groupId, groupName) VALUES(?, ?), (?, ?), (?, ?), (?,?)", null, "abc", null, "ab", null, "bc", null, "ac");
         db.run("INSERT INTO userGroups VALUES(?, ?), (?, ?), (?, ?)", [1,1, 1, 2, 1,3]);
         db.run("INSERT INTO userGroups VALUES(?, ?), (?, ?)", [2,1, 2,2]);
@@ -68,7 +68,8 @@ module.exports = {
         
     },
     getGroupChatHistory: function(groupId, callback){
-        db.all("SELECT m.senderId, u.userName as senderName, m.message from messages as m  " + 
+        db.all("SELECT m.senderId, u.userName as senderName, m.message, m.timestamp " +
+            "from messages as m  " + 
             "INNER JOIN users as u on m.senderId=u.userId " + 
             "WHERE m.receiverId=?", groupId, callback);
     },

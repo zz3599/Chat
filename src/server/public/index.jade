@@ -54,7 +54,7 @@ html(lang="en")
                         console.log(data);
                         if(data.messages){
                             $.each(data.messages, function(i, e){
-                                $('<li>', {text: e}).appendTo('#messages');
+                               $('<li>', {text: (new Date(e.timestamp)).toString() + '\t' + e.senderName + ':\t' + e.message}).appendTo('#messages');
                             });
                         }
                     }
@@ -67,7 +67,12 @@ html(lang="en")
             $.get('/message', {groupId: receiverGroupId}, function(data){
                 console.log(data);
                 console.log('selected receiverGroupId=' + receiverGroupId);
-                
+                if(receiverGroupId){
+                    $('#messages').empty();
+                }
+                for(var i = 0; i < data.length; i++){
+                   $('<li>', {text: (new Date(data[i].timestamp)).toString() + '\t' + data[i].senderName + ':\t' + data[i].message}).appendTo('#messages');
+                }
             });
         });
 
