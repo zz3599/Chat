@@ -16,8 +16,54 @@ app.use(cookieSession({
 
 app.locals.pretty = true;
 
-var groupUsermap = {};
+//After this interval users are considered inactive and will no longer trigger retries for message submission. If no listener is attached 
+//to the emitter, just delete the user from all usergroups.
+var ACTIVE_MILLIS = 10*60*1000;
+//The emitter event string for a new message
+var EMIT_MESSAGE_EVENT = 'newMessage';
+var responseQueue = [];
+
+//Active users within the last x minutes. These users will have newly posted messages trigger retries to 
+//emit to their event listener. 
+//userid => timestamp of last active time
+var activeUserMap = {};
+var groupUserMap = {};
 var userEmitterMap = {};
+//user -> [unemitted messages]
+//Preserve messages for active users who may have not been active recently so the next poll immediately fetches all of them
+var newMessages = {};
+
+function pushNewMessage(userId, message, timestamp, username){
+    var messageQueue = newMessages[userId];
+    var messageObject = {'message': message, 'timestamp': timestamp, 'username': username};
+    if(!messageQueue){
+        newMessages[userId] = [messageObject];
+    } else {
+        messageQueue.push(messageObject);;
+    }
+}
+
+function clearMessages(userId){
+    delete newMessages[userId];
+}
+
+function setActiveUser(userId){
+    activeUserMap[userId] = {
+        lastActive: new Date().getTime(), // when was user last active
+        pushPoller: undefined // if user was active, 
+    } ;
+    return activeUserMap[userId];
+}
+
+function removeActiveuser(userId){
+    if(userId in activeUserMap){
+        var pushPoller;
+        if(pushPoller = activeUserMap[userId]['pushPoller']){
+            clearInterval(pushPoller);
+        }
+    }
+    delete activeUserMap[userId];
+}
 
 function mapMessages(groupMessageMap, messages){
     //store messages in session with map {groupId -> [messages]}
@@ -36,15 +82,15 @@ function mapMessages(groupMessageMap, messages){
     }
 }
 function putUserIntoGroup(userid, groupid){
-    var userids = groupUsermap[groupid];
+    var userids = groupUserMap[groupid];
     if(userids === undefined){
-        groupUsermap[groupid] = [userid];
+        groupUserMap[groupid] = [userid];
     } else if(userids instanceof Array){
         if(userids.indexOf(userid) === -1){
             userids.push(userid);
         }
     } else {
-        throw "groupUserId map has value of type " + typeof(groupUsermap[groupid]);
+        throw "groupUserId map has value of type " + typeof(groupUserMap[groupid]);
     }
 }
 function getUserEmitter(userid){
@@ -55,9 +101,6 @@ function getUserEmitter(userid){
     }
     return eventEmitter; 
 }
-
-var newMessages = [];
-var responseQueue = [];
 
 function logRow(err, rows){
     for(var i = 0; i < rows.length; i++){
@@ -138,7 +181,7 @@ app.route('/chat').get(function(req, res, next){
             // groupid -> [usernames not of this user - for displaying purposes]
             var groupUsernames = {};
             var prevGroupId = -1;
-
+            setActiveUser(userId);
             for(var i = 0; i < rows.length; i++){
                 if(userId != rows[i].userId){                    
                     if(rows[i].groupId in groupUsernames){
@@ -153,7 +196,7 @@ app.route('/chat').get(function(req, res, next){
                 }                
             }
             console.log(groupUsernames);
-            console.log(groupUsermap); //global var populated/            
+            console.log(groupUserMap); //global var populated/            
             res.render(path.resolve('public/index.jade'), {'existingMessages':[], 'groups': groupUsernames});            
            
 
@@ -179,14 +222,50 @@ app.route('/message').get(function(req, res, next){
     if(m){
         var timestamp = new Date().getTime();
         ddl.putMessage(req.session.userId, receiverGroupId, m, timestamp, function(err){
-            newMessages.push(m);
-            var usersInGroup = groupUsermap[receiverGroupId];
-            console.log(usersInGroup.length + ' users in the group');
+            var usersInGroup = groupUserMap[receiverGroupId];
+            console.log(usersInGroup.length + ' active users in the group');
             if(usersInGroup){
                 //emit events to all users in the group
                 for(var i = 0; i < usersInGroup.length; i++){
-                    var emitter = getUserEmitter(usersInGroup[i]); 
-                    emitter.emit('newMessage', {message: m, timestamp: timestamp, senderName: req.session.userName});     
+                    var targetUserId = usersInGroup[i];
+                    var emitter = getUserEmitter(targetUserId); 
+                    // if there are active listeners on the event, emit immediately
+                    if(emitter.listeners(EMIT_MESSAGE_EVENT).length > 0){
+                        console.log('>0 listeners for userid: ' + targetUserId);
+                        emitter.emit(EMIT_MESSAGE_EVENT, {message: m, timestamp: timestamp, senderName: req.session.userName});     
+                    } else { 
+                        console.log('0 listeners for userid: ' + targetUserId);
+                        // no active listeners, check if the user is active
+                        // if the user is active, push to the user message queue, 
+                        // retry pushing to the user periodically until they reconnect, with no (todo: exponential) backoff
+                        // otherwise, just ignore the message
+                        var activeUser;
+                        if(activeUser = activeUserMap[targetUserId]){
+                            pushNewMessage(targetUserId, m, timestamp, req.session.username);
+                            //dont want multiple setintervals running per user that had a mistimed poll
+                            if(!activeUser['pushPoller']){
+                                activeUser['pushPoller'] = setInterval(function(){
+                                    var emitter =  getUserEmitter(targetUserId);
+                                    if(emitter.listeners(EMIT_MESSAGE_EVENT).length > 0){
+                                        for(var i = 0; i < newMessages[targetUserId].length; i++){
+                                            var messageObject = newMessages[targetUserId][i];
+                                            emitter.emit(EMIT_MESSAGE_EVENT, {
+                                                    message: messageObject['message'], 
+                                                    timestamp: messageObject['timestamp'], 
+                                                    senderName: messageObject['sendername']
+                                            });
+
+                                        }
+                                        clearInterval(activeUser['pushPoller']);
+                                    }
+                                }, 1000);
+                            }
+                        } else {
+                            //clear message queue for the targeted user since they are inactive- next time they poll just give them full db read
+                            clearMessages[targetUserId];
+                        }
+                        
+                    }
                 }
             }
             console.log('inserted message');
@@ -199,35 +278,32 @@ app.route('/message').get(function(req, res, next){
 //Listens to the message eventemitter and does no DB reads
 app.route('/poll').get(function(req, res, next){
     console.log('polling for new messages for user id=' + req.session.userId);
-    if(newMessages.length !== 0){
-        console.log('there are new messages');
-    } else {
-        console.log('no new messages');
-    }
     var userid=req.session.userId;
+    setActiveUser(userid);
     var userEmitter = getUserEmitter(userid);
     userEmitter.removeAllListeners();
-    userEmitter.once('newMessage', function(data){
+    userEmitter.once(EMIT_MESSAGE_EVENT, function(data){
         console.log('received newMesage: ' + data);
         res.send({'messages':[data]});
     });
 });
 
 
-//clear old responses that have been stale for over X seconds
-(function clearTimedoutResponses(){
+//clear users from activeusermap that have not been active for a while
+(function clearInactiveUsers(){
     setTimeout(function(){
-        var minTime = new Date().getTime() - 10000;
-        for(var i = responseQueue.length - 1; i >= 0 ; i--){
-            if(responseQueue[i].timestamp < minTime){
-                console.log('cleared one response');
-                responseQueue[i].response.send(200);
-                responseQueue.splice(i, 1);
+        var minThresholdTime = new Date().getTime() - ACTIVE_MILLIS; 
+        for(var elem in activeUserMap){
+            if(activeUserMap.hasOwnProperty(elem)){
+                if(activeUserMap[elem]['lastActive'] < minThresholdTime){
+                    console.log('removed inactive user: ' + elem);
+                    removeActiveUser(elem);
+                }
             }
         }
-        clearTimedoutResponses();
+        clearInactiveUsers();
     }, 1000);
-})//();
+})();
 
 
 
