@@ -21,7 +21,6 @@ app.locals.pretty = true;
 var ACTIVE_MILLIS = 10*60*1000;
 //The emitter event string for a new message
 var EMIT_MESSAGE_EVENT = 'newMessage';
-var responseQueue = [];
 
 //Active users within the last x minutes. These users will have newly posted messages trigger retries to 
 //emit to their event listener. 
@@ -32,6 +31,13 @@ var userEmitterMap = {};
 //user -> [unemitted messages]
 //Preserve messages for active users who may have not been active recently so the next poll immediately fetches all of them
 var newMessages = {};
+//Active users who did not have a response attached at the time a message came
+var usersQueue = {};
+
+function addUserQueue(userId){
+    usersQueue[userId] = true;
+}
+
 
 function pushNewMessage(userId, message, timestamp, username){
     var messageQueue = newMessages[userId];
@@ -239,31 +245,11 @@ app.route('/message').get(function(req, res, next){
                         // if the user is active, push to the user message queue, 
                         // retry pushing to the user periodically until they reconnect, with no (todo: exponential) backoff
                         // otherwise, just ignore the message
-                        var activeUser;
-                        if((activeUser = activeUserMap[targetUserId]) != null){
-                            pushNewMessage(targetUserId, m, timestamp, req.session.username);
-                            //dont want multiple setintervals running per user that had a mistimed poll
-                            if(!activeUser['pushPoller']){
-                                activeUser['pushPoller'] = setInterval(function(){
-                                    var emitter =  getUserEmitter(targetUserId);
-                                    if(emitter.listeners(EMIT_MESSAGE_EVENT).length > 0){
-                                        var messageObjects = [];
-                                        for(var i = 0; i < newMessages[targetUserId].length; i++){
-                                            var messageObject = newMessages[targetUserId][i];
-                                            messageObjects.push({
-                                                message: messageObject['message'], 
-                                                timestamp: messageObject['timestamp'], 
-                                                senderName: messageObject['senderName']
-                                            });
-                                        }
-                                        emitter.emit(EMIT_MESSAGE_EVENT, messageObjects);
-                                        clearInterval(activeUser['pushPoller']);
-                                        activeUser['pushPoller'] = null;
-                                        newMessages[targetUserId].length = 0;
-                                        console.log('User listener for ' + targetUserId + ' found, sent ' + messageObjects.length + ' messages');
-                                    }
-                                }, 1000);
-                            }
+                        var activeUser = activeUserMap[targetUserId];
+                        if(activeUser != null){
+                            console.log('userid ' + targetUserId + ' is active - adding to usersQueue');
+                            pushNewMessage(targetUserId, m, timestamp, req.session.userName);
+                            addUserQueue(targetUserId);
                         } else {
                             //clear message queue for the targeted user since they are inactive- next time they poll just give them full db read
                             clearMessages[targetUserId];
@@ -296,6 +282,33 @@ app.route('/poll').get(function(req, res, next){
     }, 10000);
     
 });
+
+//Sends messages to users in the usersQueue- users that did not have their responses submitted in time for the message events
+(function updateQueuedUsers(){
+    setTimeout(function(){
+        for(var property in usersQueue){
+            if(usersQueue.hasOwnProperty(property) && usersQueue[property] === true){
+                var userId = parseInt(property, 10);
+                console.log('Updating messages for userid ' + userId);
+                var emitter = getUserEmitter(userId);
+                if(emitter.listeners(EMIT_MESSAGE_EVENT).length > 0){
+                    var messageObjects = [];
+                    for(var i = 0; i < newMessages[userId].length; i++){
+                        var messageObject = newMessages[userId][i];
+                        messageObjects.push(messageObject);
+                    }
+                    emitter.emit(EMIT_MESSAGE_EVENT, messageObjects);                                        
+                    console.log('Updating messages for ' + userId + ', sent ' + messageObjects.length);
+                    //clear the emitted messages
+                    newMessages[userId].length = 0;
+                    //remove the user from the queue
+                    delete usersQueue[userId];
+                }            
+            }
+        }
+        updateQueuedUsers();
+    }, 1000);
+})();
 
 
 //clear users from activeusermap that have not been active for a while
