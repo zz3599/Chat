@@ -35,7 +35,7 @@ var newMessages = {};
 
 function pushNewMessage(userId, message, timestamp, username){
     var messageQueue = newMessages[userId];
-    var messageObject = {'message': message, 'timestamp': timestamp, 'username': username};
+    var messageObject = {'message': message, 'timestamp': timestamp, 'senderName': username};
     if(!messageQueue){
         newMessages[userId] = [messageObject];
     } else {
@@ -232,7 +232,7 @@ app.route('/message').get(function(req, res, next){
                     // if there are active listeners on the event, emit immediately
                     if(emitter.listeners(EMIT_MESSAGE_EVENT).length > 0){
                         console.log('>0 listeners for userid: ' + targetUserId);
-                        emitter.emit(EMIT_MESSAGE_EVENT, {message: m, timestamp: timestamp, senderName: req.session.userName});     
+                        emitter.emit(EMIT_MESSAGE_EVENT, [{message: m, timestamp: timestamp, senderName: req.session.userName}]);     
                     } else { 
                         console.log('0 listeners for userid: ' + targetUserId);
                         // no active listeners, check if the user is active
@@ -240,23 +240,27 @@ app.route('/message').get(function(req, res, next){
                         // retry pushing to the user periodically until they reconnect, with no (todo: exponential) backoff
                         // otherwise, just ignore the message
                         var activeUser;
-                        if(activeUser = activeUserMap[targetUserId]){
+                        if((activeUser = activeUserMap[targetUserId]) != null){
                             pushNewMessage(targetUserId, m, timestamp, req.session.username);
                             //dont want multiple setintervals running per user that had a mistimed poll
                             if(!activeUser['pushPoller']){
                                 activeUser['pushPoller'] = setInterval(function(){
                                     var emitter =  getUserEmitter(targetUserId);
                                     if(emitter.listeners(EMIT_MESSAGE_EVENT).length > 0){
+                                        var messageObjects = [];
                                         for(var i = 0; i < newMessages[targetUserId].length; i++){
                                             var messageObject = newMessages[targetUserId][i];
-                                            emitter.emit(EMIT_MESSAGE_EVENT, {
-                                                    message: messageObject['message'], 
-                                                    timestamp: messageObject['timestamp'], 
-                                                    senderName: messageObject['sendername']
+                                            messageObjects.push({
+                                                message: messageObject['message'], 
+                                                timestamp: messageObject['timestamp'], 
+                                                senderName: messageObject['senderName']
                                             });
-
                                         }
+                                        emitter.emit(EMIT_MESSAGE_EVENT, messageObjects);
                                         clearInterval(activeUser['pushPoller']);
+                                        activeUser['pushPoller'] = null;
+                                        newMessages[targetUserId].length = 0;
+                                        console.log('User listener for ' + targetUserId + ' found, sent ' + messageObjects.length + ' messages');
                                     }
                                 }, 1000);
                             }
@@ -281,11 +285,16 @@ app.route('/poll').get(function(req, res, next){
     var userid=req.session.userId;
     setActiveUser(userid);
     var userEmitter = getUserEmitter(userid);
-    userEmitter.removeAllListeners();
-    userEmitter.once(EMIT_MESSAGE_EVENT, function(data){
-        console.log('received newMesage: ' + data);
-        res.send({'messages':[data]});
-    });
+    //delay by 10 seconds so we can test the reconnect functionality
+    setTimeout(function(){
+        userEmitter.removeAllListeners();
+        userEmitter.once(EMIT_MESSAGE_EVENT, function(data){
+            console.log('received newMesage: ' + data);
+            res.send({'messages': data});
+        });
+        console.log('1 active listener for userid ' + userid);
+    }, 10000);
+    
 });
 
 
