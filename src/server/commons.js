@@ -25,7 +25,7 @@ module.exports = {
 	usersQueue : {},
 
 	addUserQueue: function (userId){
-	    usersQueue[userId] = true;
+	    this.usersQueue[userId] = true;
 	},
 
 	pushNewMessage: function (userId, message, timestamp, username){

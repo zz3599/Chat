@@ -21,13 +21,13 @@ app.route('/home').get(function(req, res, next){
     res.render(path.resolve('public/home.jade'), {});
 });
 
+//Routers
+require('./routers/auth.js')(app, ddl, commons);
+require('./routers/chathome.js')(app, ddl, commons);
+require('./routers/message.js')(app, ddl, commons);
+require('./routers/poll.js')(app, ddl, commons);
 
-require('./auth.js')(app, ddl, commons);
-require('./chathome.js')(app, ddl, commons);
-require('./message.js')(app, ddl, commons);
-require('./poll.js')(app, ddl, commons);
-
-
+//Background jobs
 require('./cron/updateQueuedUsers.js')(commons);
 require('./cron/clearInactiveUsers.js')(commons);
 
