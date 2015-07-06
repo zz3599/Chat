@@ -49,7 +49,7 @@ module.exports = {
 	    return this.activeUserMap[userId];
 	},
 
-	removeActiveuser: function (userId){
+	removeActiveUser: function (userId){
 	    if(userId in this.activeUserMap){
 	    	delete this.activeUserMap[userId];    
 	    }	    
